@@ -6,7 +6,7 @@ Objective of this exercise it to predict housing price(medv) using various indep
 
 ## Findings
 Based on Test Error, following order was seen for predictive power 
-# Random Forest > Boosting > Neural Network > Bagging >  GAMs > Regression Tree >  Stepwise ~ Simple > Lasso Regression
+### Random Forest > Boosting > Neural Network > Bagging >  GAMs > Regression Tree >  Stepwise ~ Simple > Lasso Regression
 
 ## Detailed analysis and report
 
