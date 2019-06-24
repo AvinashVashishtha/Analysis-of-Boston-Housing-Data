@@ -1,5 +1,5 @@
 # Analysis-of-Boston-Housing-Data
-Simple linear Regression | Best/Stepwise | Lasso | Regression Tree | GAMs | Bagging | Random Forest | Boosting | Neural Networking
+Simple linear Regression | Best/Stepwise | Lasso | Regression Tree | GAMs | Bagging | Random Forest | Boosting | Neural Network
 
 ## Abstract
 Objective of this exercise it to predict housing price(medv) using various independent variables given in the data- crime rate, rooms, nitrogen oxides concentration etc
