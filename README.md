@@ -5,7 +5,8 @@ Simple linear Regression | Best/Stepwise | Lasso | Regression Tree | GAMs | Bagg
 Objective of this exercise it to predict housing price(medv) using various independent variables given in the data- crime rate, rooms, nitrogen oxides concentration etc
 
 ## Findings
-Based on Test Error, following order was seen ---> predictive power of  Random Forest > Boosting > Neural Network > Bagging >  GAMs > Regression Tree >  Stepwise ~ Simple > Lasso Regression
+Based on Test Error, following order was seen for predictive power 
+## Random Forest > Boosting > Neural Network > Bagging >  GAMs > Regression Tree >  Stepwise ~ Simple > Lasso Regression
 
 ## Detailed analysis and report
 
