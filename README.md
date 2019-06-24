@@ -9,10 +9,10 @@ Objective of this exercise it to predict housing price(medv) using various indep
 Please find the RPubs link below.
 http://rpubs.com/Avinash_19910102/507710
 
-## Description 
+## Data Description 
 This data frame contains the following columns:
 
-crim
+#crim
 per capita crime rate by town.
 
 zn
