@@ -1,0 +1,502 @@
+---
+title: "Analysis of Boston Housing Data using multiple models"
+author: "Avinash Vashishtha"
+date: "June 23, 2019" 
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##  {.tabset .tabset-fade}
+
+### 1.Introduction
+
+***1.Objective***
+
+The objective of this exercise is to apply various regression models to continuous data and compare their model results.
+
+
+***2.Boston Housing Data Introduction***
+
+Boston housing data is a built-in dataset in MASS package, so you do not need to download externally. Package MASS comes with R when you installed R, so no need to use install.packages(MASS) to download and install, but you do need to load this package.
+
+```{r , include=TRUE, cache = TRUE}
+set.seed(2019)
+
+library(MASS)
+library(tidyr)
+library(knitr)
+library(ggplot2)
+
+library(leaps)  #best subset
+library(glmnet) #lasso
+library(rpart) #Regression Tree
+library(rpart.plot)
+library(mgcv) # GAM
+library(ipred) #Bagging
+library(randomForest) #Random Forest
+library(gbm) #Boosting
+library(neuralnet) #Neural Network
+```
+
+```{r , include=TRUE, cache = TRUE}
+data(Boston); #this data is in MASS package
+colnames(Boston) 
+dim(Boston)
+str(Boston)
+summary(Boston)
+```
+
+
+***3.Preparation of Dataset***
+
+***3.1 Splitting the data to train and test dataset***
+
+```{r , include=TRUE, cache = TRUE}
+sample_index <- sample(nrow(Boston),nrow(Boston)*0.90)
+Boston_train <- Boston[sample_index,]
+Boston_test <- Boston[-sample_index,]
+Boston_train_scale<-Boston_train
+```
+
+***3.2 Standardization***
+
+```{r , include=TRUE, cache = TRUE}
+for (i in 1:(ncol(Boston_train)-1)){
+  Boston_train_scale[,i] <- scale(Boston_train[,i])
+}
+```
+
+
+### 2.Simple Linear
+
+***Simple Linear Regression***
+```{r , include=TRUE, cache = TRUE}
+model <- lm(medv~.,data=Boston_train)
+model_summary<-summary(model)
+model_summary
+```
+
+***Model diagnostic***
+```{r , include=TRUE, cache = TRUE}
+(model_summary$sigma)^2
+model_summary$r.squared
+model_summary$adj.r.squared
+AIC(model)
+BIC(model)
+plot(model)
+```
+
+```{r , include=TRUE, cache = TRUE}
+linear_train_mse<-(model_summary$sigma)^2
+pi <- predict(object = model, newdata = Boston_test)
+linear_test_mse<-mean((pi - Boston_test$medv)^2)
+linear_train_adjrsq<-model_summary$adj.r.squared
+linear_train_aic<-AIC(model)
+linear_train_aic<-BIC(model)
+```
+
+
+### 3.Best Subset | Stepwise
+
+***3.1.Best Subset***
+```{r , include=TRUE, cache = TRUE}
+model_sel <- regsubsets(medv~.,data=Boston_train, nbest=2, nvmax = 14)
+summary(model_sel)
+plot(model_sel, scale="bic")
+
+model <- lm(medv~crim+zn+chas+nox+rm+dis+rad+tax+ptratio+black+lstat,data=Boston_train)
+model_summary<-summary(model)
+model_summary
+```
+
+
+***Model diagnostic***
+```{r , include=TRUE, cache = TRUE}
+best_train_mse<-(model_summary$sigma)^2
+pi <- predict(object = model, newdata = Boston_test)
+best_test_mse<-mean((pi - Boston_test$medv)^2)
+best_train_adjrsq<-model_summary$adj.r.squared
+best_train_aic<-AIC(model)
+best_train_aic<-BIC(model)
+```
+
+***3.2.Forward/Backward/Stepwise Regression Using AIC***
+```{r , include=TRUE, cache = TRUE}
+nullmodel=lm(medv~1, data=Boston_train)
+fullmodel=lm(medv~., data=Boston_train)
+model_step_b <- step(fullmodel,direction='backward')
+model_step_f <- step(nullmodel, scope=list(lower=nullmodel, upper=fullmodel), direction='forward')
+model_step_s <- step(nullmodel, scope=list(lower=nullmodel, upper=fullmodel), direction='both')
+model <- lm(medv~crim+zn+chas+nox+rm+dis+rad+tax+ptratio+black+lstat,data=Boston_train)
+model_summary<-summary(model)
+model_summary
+```
+
+
+***Model diagnostic***
+```{r , include=TRUE, cache = TRUE}
+step_train_mse<-(model_summary$sigma)^2
+pi <- predict(object = model, newdata = Boston_test)
+step_test_mse<-mean((pi - Boston_test$medv)^2)
+step_train_adjrsq<-model_summary$adj.r.squared
+step_train_aic<-AIC(model)
+step_train_aic<-BIC(model)
+```
+
+### 4.Lasso(L1)
+
+Lasso Regression (Least Absolute Shrinkage and Selection Operator) adds "absolute value of magnitude" of coefficient as penalty term to the loss function.
+
+***Fitting a lasso model***
+```{r , include=TRUE, cache = TRUE}
+lasso_fit = glmnet(x = as.matrix(Boston[, -c(which(colnames(Boston)=='medv'))]), y = Boston$medv, alpha = 1)
+```
+
+***use 5-fold cross validation to pick lambda***
+```{r , include=TRUE, cache = TRUE}
+cv_lasso_fit = cv.glmnet(x = as.matrix(Boston[, -c(which(colnames(Boston)=='medv'))]), y = Boston$medv, alpha = 1, nfolds = 5)
+plot(cv_lasso_fit)
+```
+
+***Identifying lambda giving minimum MSE train
+```{r , include=TRUE, cache = TRUE}
+lambda.min<-cv_lasso_fit$lambda.min
+Boston.insample.prediction = predict(lasso_fit, as.matrix(Boston[, -c(which(colnames(Boston)=='medv'))]), s = lambda.min)
+
+```
+
+***Coefficients of lambda.min***
+```{r , include=TRUE, cache = TRUE}
+#lambda = lambda.min
+coef(lasso_fit,s=lambda.min)
+
+```
+
+
+***Coefficients of lambda.min***
+```{r , include=TRUE, cache = TRUE}
+lasso_test_mse <- mean((Boston.insample.prediction - Boston$medv)^2)  
+lasso_train_mse <- mean((Boston.insample.prediction - Boston$medv)^2)
+```
+### 5.Regression Tree
+
+
+***Creating a Complex long Tree with cp value defined***
+
+* In rpart(), the cp(complexity parameter) argument is one of the parameters that are used to control the compexity of the tree. 
+* smaller the cp value, the larger (complex) tree rpart will attempt to fit. 
+* The default value for cp is 0.01
+
+
+```{r , include=TRUE, cache = TRUE}
+boston.rpart <- rpart(formula = medv ~ ., data = Boston_train,cp = 0.001)
+```
+
+
+***Checking the cp value and relative error***
+
+* Pick the one which is under the line and is least complex (towards the left)
+
+```{r , include=TRUE, cache = TRUE}
+plotcp(boston.rpart)
+printcp(boston.rpart)
+```
+
+
+
+```{r , include=TRUE, cache = TRUE}
+boston.rpart.final<-prune(boston.rpart, cp = 0.0072)
+prp(boston.rpart.final,extra = 1)
+```
+
+***In sample and out of sample prediction***
+```{r , include=TRUE, cache = TRUE}
+boston.train.pred.tree = predict(boston.rpart.final)
+boston.test.pred.tree = predict(boston.rpart.final,Boston_test)
+
+```
+
+```{r , include=TRUE, cache = TRUE}
+tree_test_mse <- mean(( boston.test.pred.tree- Boston_test$medv)^2)  
+tree_train_mse <- mean((boston.train.pred.tree - Boston_train$medv)^2)
+```
+
+
+### 6.GAMs
+
+***Building a generalized additive Model with higher order term for all variables***
+
+```{r , include=TRUE, cache = TRUE}
+gam_model <- mgcv::gam(medv ~ s(crim) + s(zn) + s(indus) + chas + s(nox) + s(rm) + 
+                   s(age) + s(dis) + rad + s(tax) + s(ptratio) + s(black) +
+                   s(lstat), data=Boston_train)
+
+summary(gam_model)
+plot(gam_model, shade=TRUE,seWithMean=TRUE,scale=0, pages = 1)
+```
+
+***Switching Zn and age  to linear terms as they have an estimated degree of freedom of 1***
+
+```{r , include=TRUE, cache = TRUE}
+gam_model <- mgcv::gam(medv ~ s(crim) + zn + s(indus) + chas + s(nox) + s(rm) + 
+                   age + s(dis) + rad + s(tax) + s(ptratio) + s(black) +
+                   s(lstat), data=Boston_train)
+
+summary(gam_model)
+```
+
+***Later Removing it as they are insignificant in the model***
+
+```{r , include=TRUE, cache = TRUE}
+gam_model <- mgcv::gam(medv ~ s(crim)  + s(indus) + chas + s(nox) + s(rm) + 
+                     s(dis) + rad + s(tax) + s(ptratio) + s(black) +
+                   s(lstat), data=Boston_train)
+
+summary(gam_model)
+plot(gam_model, shade=TRUE,seWithMean=TRUE,scale=0, pages = 1)
+coef(gam_model)
+```
+
+***Model diagnostic***
+```{r , include=TRUE, cache = TRUE}
+pi_train <- predict(object = gam_model)
+gam_train_mse<-mean((pi_train - Boston_train$medv)^2)
+pi_test <- predict(object = gam_model, newdata = Boston_test)
+gam_test_mse<-mean((pi_test - Boston_test$medv)^2)
+```
+
+
+### 7.Bagging
+
+***Getting optimal count of trees to be made***
+
+```{r , include=TRUE, cache = TRUE}
+ntree<- c(1, 3, 5, seq(10, 200, 10))
+MSE.test<- rep(0, length(ntree))
+for(i in 1:length(ntree)){
+  boston.bag1<- bagging(medv~., data = Boston_train, nbagg=ntree[i])
+  boston.bag.pred1<- predict(boston.bag1, newdata = Boston_test)
+  MSE.test[i]<- mean((Boston_test$medv-boston.bag.pred1)^2)
+}
+plot(ntree, MSE.test, type = 'l', col=2, lwd=2, xaxt="n")
+axis(1, at = ntree, las=1)
+```
+
+***Decided to go with 100 trees***
+
+```{r , include=TRUE, cache = TRUE}
+boston.bag<- bagging(medv~., data = Boston_train, nbagg=100)
+boston.bag
+```
+
+***Model diagnostic***
+```{r , include=TRUE, cache = TRUE}
+pi_train <- predict(object = boston.bag)
+bagging_train_mse<-mean((pi_train - Boston_train$medv)^2)
+pi_test <- predict(object = boston.bag, newdata = Boston_test)
+bagging_test_mse<-mean((pi_test - Boston_test$medv)^2)
+```
+
+
+### 8.Random Forest
+
+***Building a Random Forest model***
+
+* By default, m=p/3 for regression tree
+* ntree default is 500
+```{r , include=TRUE, cache = TRUE}
+
+boston.rf<- randomForest(medv~., data = Boston_train, importance=TRUE)
+boston.rf
+
+```
+
+***Analyzing importance of each variable (higher the better)***
+```{r , include=TRUE, cache = TRUE}
+boston.rf$importance
+```
+
+***Plotting the out-of-bag error vs number of trees to select the optimal value**
+* optimal number of trees - 200.
+```{r , include=TRUE, cache = TRUE}
+plot(boston.rf$mse, type='l', col=2, lwd=2, xlab = "ntree", ylab = "OOB Error")
+```
+
+
+***We can also identify the optimal mtry value, Optimal value 6 is decided based on OOB and test error***
+```{r , include=TRUE, cache = TRUE}
+oob.err<- rep(0, 13)
+test.err<- rep(0, 13)
+for(i in 1:13){
+  fit<- randomForest(medv~., data = Boston_train, mtry=i)
+  oob.err[i]<- fit$mse[500]
+  test.err[i]<- mean((Boston_test$medv-predict(fit, Boston_test))^2)
+  cat(i, " ")
+}
+matplot(cbind(test.err, oob.err), pch=15, col = c("red", "blue"), type = "b", ylab = "MSE", xlab = "mtry")
+legend("topright", legend = c("test Error", "OOB Error"), pch = 15, col = c("red", "blue"))
+```
+
+```{r , include=TRUE, cache = TRUE}
+random_forest_model<- randomForest(medv~., data = Boston_train, ntree=300, mtry=6)
+```
+
+
+***Model diagnostic***
+```{r , include=TRUE, cache = TRUE}
+pi_train <- predict(object = random_forest_model)
+random_train_mse<-mean((pi_train - Boston_train$medv)^2)
+pi_test <- predict(object = random_forest_model, newdata = Boston_test)
+random_test_mse<-mean((pi_test - Boston_test$medv)^2)
+```
+
+### 9.Boosting
+
+```{r , include=TRUE, cache = TRUE}
+
+boston.boost<- gbm(medv~., data = Boston_train, distribution = "gaussian", n.trees = 10000, shrinkage = 0.01, interaction.depth = 8)
+summary(boston.boost)
+```
+
+***Plotting test mse vs number of trees to select the optimal value. Optimal value -2000***
+
+```{r , include=TRUE, cache = TRUE}
+ntree<- seq(100, 10000, 100)
+predmat<- predict(boston.boost, newdata = Boston_test, n.trees = ntree)
+err<- apply((predmat-Boston_test$medv)^2, 2, mean)
+plot(ntree, err, type = 'l', col=2, lwd=2, xlab = "n.trees", ylab = "Test MSE")
+abline(h=min(test.err), lty=2)
+
+```
+
+***The fitted boosted tree also gives the relation between response and each predictor.***
+
+```{r , include=TRUE, cache = TRUE}
+
+par(mfrow=c(1,2))
+plot(boston.boost, i="lstat")
+plot(boston.boost, i="rm")
+```
+
+```{r , include=TRUE, cache = TRUE}
+boosting_model<- gbm(medv~., data = Boston_train, distribution = "gaussian"
+                     ,n.trees = 2000, shrinkage = 0.01, interaction.depth = 8)
+```
+
+
+***Model diagnostic***
+```{r , include=TRUE, cache = TRUE}
+pi_train <- predict(object = boosting_model, n.trees = 2000)
+boost_train_mse<-mean((pi_train - Boston_train$medv)^2)
+pi_test <- predict(object = boosting_model, newdata = Boston_test, n.trees = 2000)
+boost_test_mse<-mean((pi_test - Boston_test$medv)^2)
+```
+
+### 10.Neural Network 
+
+```{r , include=TRUE, cache = TRUE}
+
+
+# storing minimum and maximum values for each columns
+maxs <- apply(Boston, 2, max) 
+mins <- apply(Boston, 2, min)
+
+# scaling the original dataframe so that each each numeric column ranges from 0-1
+scaled <- as.data.frame(scale(Boston, center = mins, scale = maxs - mins))
+
+#index of the dataset
+index <- sample_index
+
+# scaled train and test
+train_ <- scaled[index,]
+test_ <- scaled[-index,]
+
+# Building a Neural Network Model
+n <- names(train_)
+f <- as.formula(paste("medv ~", paste(n[!n %in% "medv"], collapse = " + ")))
+neural_net_model <- neuralnet(f,data=train_,hidden=c(5,3),linear.output=T)
+
+# Plotting the model
+plot(neural_net_model)
+
+```
+
+```{r , include=TRUE, cache = TRUE}
+# predicting on train and test set
+neural_net_pred_train_scaled <- compute(neural_net_model, train_[,1:13]) 
+neural_net_pred_test_scaled <- compute(neural_net_model, test_[,1:13]) 
+
+# converting the scaled predictions to original values
+neural_net_pred_train <- 
+  neural_net_pred_train_scaled$net.result*(max(Boston$medv)-min(Boston$medv))+min(Boston$medv)
+
+# converting the scaled predictions to original values
+neural_net_pred_test <- 
+  neural_net_pred_test_scaled$net.result*(max(Boston$medv)-min(Boston$medv))+min(Boston$medv)
+
+# converting the scaled train and test to original values
+train_original <- (train_$medv)*(max(Boston$medv)-min(Boston$medv))+min(Boston$medv)
+test_original <- (test_$medv)*(max(Boston$medv)-min(Boston$medv))+min(Boston$medv)
+  
+# calculating train and test mse
+neural_net_train_mse <- sum((train_original - neural_net_pred_train)^2)/nrow(train_)
+neural_net_test_mse <- sum((test_original - neural_net_pred_test)^2)/nrow(test_)
+```
+
+
+### 11.Comparison of models
+
+***Comparing Model Diagnostics of various models***
+
+```{r , include=TRUE, cache = TRUE}
+model = factor(c("Simple", "Step" ,"Lasso", "Tree", "GAMs","Bagging", "RF", "Boosting",  "NN"),
+              levels=c("Simple", "Step", "Lasso", "Tree", "GAMs", "Bagging", "RF", "Boosting" , "NN"))
+
+train_mse <- c(
+               linear_train_mse,
+               step_train_mse,
+               lasso_train_mse,
+               tree_train_mse,
+               gam_train_mse,
+               bagging_train_mse,
+               random_train_mse,
+               boost_train_mse,
+               neural_net_train_mse)
+
+test_mse <- c( linear_test_mse,
+               step_test_mse,
+               lasso_test_mse,
+               tree_test_mse,
+               gam_test_mse,
+               bagging_test_mse,
+               random_test_mse,
+               boost_test_mse,
+               neural_net_test_mse)
+
+comparison_table <- data.frame(model=model,
+                               train = train_mse,
+                               test = test_mse)
+
+comparison_table$train <- round(comparison_table$train,2)
+comparison_table$test <- round(comparison_table$test,2)
+
+comparison_table1 <- gather(comparison_table, subset, mse, 2:3)
+
+```
+
+```{r , include=TRUE, cache = TRUE}
+kable(comparison_table)
+```
+
+```{r , include=TRUE, cache = TRUE}
+ggplot(comparison_table1, aes(x=model, y=mse, group=subset, color=subset, label=mse)) +
+  geom_line(linetype="dashed", size=1.2)+
+  geom_point(size=3) +
+  geom_label(show_guide  = F)
+```
+
+```{r , include=TRUE, cache = TRUE}
+```
